@@ -18,6 +18,7 @@ These notes are based on the branch `track2` of
   * [Use structures and/or functional options for passing multiple options](#use-structures-andor-functional-options-for-passing-multiple-options)
   * [Document packages and follow idiomatic-documentation patterns](#document-packages-and-follow-idiomatic-documentation-patterns)
   * [Use fmt.Sprintf or strings.Builder for string building](#use-fmtsprintf-or-stringsbuilder-for-string-building)
+  * [Add tests](#add-tests)
 
 <!-- vim-markdown-toc -->
 
@@ -364,3 +365,24 @@ Readability-wise is the worse option as well. The best combination of
 readability and performance is given by `strings.Builder`. Concat in one-line is
 very easy to read as well and the most performant. The idiomatic way would be
 `fmt.Sprintf`.
+
+### Add tests
+
+```
+~/code/src/github.com/Azure/azure-sdk-for-go track2
+❯ find ./sdk/ | grep "_test" | wc -l
+      29
+
+~/code/src/github.com/Azure/azure-sdk-for-go track2
+❯ find ./sdk/ | wc -l
+     381
+```
+
+Is not just adding tests but adding examples as well. These get added to the
+documentation and helps users to pick up quickly how to implement the objects
+and take advantage of the methods. It helps as well to serve as inspiration for
+best approaches on implementations.
+
+It should add benchmarks in order to make sure there's no performance
+regressions in changes and that code being implemented will not add a burden to
+customers' applications.
