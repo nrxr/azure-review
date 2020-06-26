@@ -16,55 +16,128 @@ These notes are based on the branch `track2` of
   * [Clients returned should be interfaces implemented by private structures](#clients-returned-should-be-interfaces-implemented-by-private-structures)
 * [Things that must be changed](#things-that-must-be-changed)
   * [Use structures and/or functional options for passing multiple options](#use-structures-andor-functional-options-for-passing-multiple-options)
-  * [Document packages](#document-packages)
+  * [Document packages and follow idiomatic-documentation patterns](#document-packages-and-follow-idiomatic-documentation-patterns)
   * [Use fmt.Sprintf or strings.Builder for string building](#use-fmtsprintf-or-stringsbuilder-for-string-building)
 
 <!-- vim-markdown-toc -->
 
 ## TL;DR;
 
-I'm a developer. I want to use Azure's SDK.
+I'm a developer. I want to use Azure's Go SDK in an idiomatic way, following
+patterns I'm using already in the rest of my code.
 
 I would love to use it as:
 
-    package main
+```
+package main
 
-    import (
-      "ctx"
+import (
+  "ctx"
 
-      "go.azure.org/storage/blob"
-      "go.azure.org/storage/container"
-      "go.azure.org/azidentity/clicred"
-    )
+  "go.azure.org/storage/blob"
+  "go.azure.org/storage/container"
+  "go.azure.org/azidentity/clicred"
+)
 
-    func main() {
-      creds, err := clicred.New()
-      if err != nil {
-        // handle error
-      }
-      
-      ctx := ctx.Background()
-      containerOpts := container.Options{Credentials: creds, Name: "name"}
-      container, err := container.NewWithContext(ctx, containerOpts)
-      // container, err := container.New(containerOpts)
-      // container, err := container.Get(containerOpts)
-      if err != nil {
-        // handle error
-      }
+func main() {
+  creds, err := clicred.New()
+  if err != nil {
+    // handle error
+  }
+  
+  ctx := ctx.Background()
+  containerOpts := container.Options{Credentials: creds, Name: "name"}
+  container, err := container.NewWithContext(ctx, containerOpts)
+  // container, err := container.New(containerOpts)
+  // container, err := container.Get(containerOpts)
+  if err != nil {
+    // handle error
+  }
 
-      cli, err := blob.New(blob.Config{Container: container, Credentials: creds})
-      if err != nil {
-        // handle error
-      }
+  cli, err := blob.New(blob.Config{Container: container, Credentials: creds})
+  if err != nil {
+    // handle error
+  }
 
-      err := cli.UploadWithContext(ctx, blob.Upload{
-        Name: "helloworld",
-        File: <io.Reader implementation>,
-      })
-      if err != nil {
-        // handle error
-      }
-    }
+  err := cli.UploadWithContext(ctx, blob.UploadInput{
+    Name: "helloworld",
+    File: <io.Reader implementation>,
+  })
+  if err != nil {
+    // handle error
+  }
+}
+```
+
+And this is great as an example for a general idea on how to use it, but the
+most likely way to use it in my systems would be inside a package, so something
+like uploading blobs would end up looking like this:
+
+```
+-- converter/converter.go --
+package converter
+
+import (
+  "go.azure.org/storage/blob"
+)
+
+type Converter struct {
+  blobcli blob.Blob
+}
+
+func New() (Converter, error) {
+  // define here what a you need. Either pass creds or already initialized
+  // instances of blob.Blob.
+  return Converter{}
+}
+-- converter/blob.go --
+package converter
+
+import (
+  "ctx"
+  "io"
+
+  "go.azure.org/storage/blob"
+)
+
+func (c *Converter) Upload(name string, f io.Reader) error {
+  return c.blobcli.Upload(blob.UploadInput{
+    Name: name,
+    File: f,
+  })
+}
+-- converter/blob_test.go --
+package converter
+
+import (
+  "strings"
+  "testing"
+
+  "go.azure.org/storage/blob"
+)
+
+type mockBlob struct {
+  blob.Blob
+}
+
+func (m mockBlob) Upload(in blob.UploadInput) error {
+  return nil
+}
+
+func TestUpload(t *testing.T) {
+  s := strings.NewReader("random text")
+  c := &Converter{blobcli: mockBlob{}}
+  err := c.Upload("filename", s)
+  if err != nil {
+    t.Errorf("error uploading file: %v", err)
+  }
+}
+```
+
+In this code `blob.Blob` is an interface and the implementation is initialized
+during the `converter.New()` run. This will allow the developer to mock a simple
+implementation of `blob.Blob` for testing. on the `converter/blob_test.go` a
+mock test for Blob actions would look like the `mockBlob` struct
 
 ## Things that can be changed
 
@@ -80,7 +153,8 @@ Right now packages are structured as if `encoding` had `json`, `xml` and `html`
 modules in the same directory instead of independent between themselves.
 
 Following the structure and subdivision already made in the CLI would be great
-and save so much time.
+and save so much time. It saves time and effort on the documentation as well
+since the workflow would be pretty much the same.
 
 https://docs.microsoft.com/en-us/azure/storage/scripts/storage-blobs-container-calculate-size-cli?toc=/cli/azure/toc.json
 
@@ -113,10 +187,12 @@ broken and to have simpler names and import paths.
 
 Currently import paths look like:
 
-    import (
-      "github.com/Azure/azure-sdk-for-go/sdk/arm/compute/2019-12-01/armcompute"
-      "github.com/Azure/azure-sdk-for-go/sdk/arm/storage/2019-06-01/armstorage"
-    )
+```
+import (
+  "github.com/Azure/azure-sdk-for-go/sdk/arm/compute/2019-12-01/armcompute"
+  "github.com/Azure/azure-sdk-for-go/sdk/arm/storage/2019-06-01/armstorage"
+)
+```
 
 There is `azure` twice (and with diffent capitalization), `sdk` twice, `arm`
 twice, `storage` twice or `compute` twice. There's explicit versioning as well
@@ -125,25 +201,29 @@ but that is covered in another section of this document.
 This can be easily solved by using vanity URLs. Uber uses it so importing `zap`
 is as easy as:
 
-    import (
-      "go.uber.org/zap"
-    )
+```
+import (
+  "go.uber.org/zap"
+)
+```
 
 The idea for this could be:
 
-    import (
-      // Simplest change to apply.
-      "go.azure.org/compute"
-      "go.azure.org/storage"
+```
+import (
+  // Simplest change to apply.
+  "go.azure.org/compute"
+  "go.azure.org/storage"
 
-      // If explicit versioning in the package name is wanted.
-      "go.azure.org/storage/2019-06-01"
+  // If explicit versioning in the package name is wanted.
+  "go.azure.org/storage/2019-06-01"
 
-      // These last two is how it would look if the naming scheme can be
-      // changed. See that section in this document for a better explanation.
-      "go.azure.org/storage/container"
-      "go.azure.org/storage/blob"
-    )
+  // These last two is how it would look if the naming scheme can be
+  // changed. See that section in this document for a better explanation.
+  "go.azure.org/storage/container"
+  "go.azure.org/storage/blob"
+)
+```
 
 This does **not** requires any change in the naming scheme in the repository,
 the vanity URL server will take care of this so is a low-effort change with big
@@ -156,10 +236,12 @@ This is a simple implementation that GCP uses: https://github.com/GoogleCloudPla
 In the first example in the document the creation of CLI credentials is as easy
 as:
 
-    // Current
-    creds, err := azidentity.NewAzureCLICredential(opts)
-    // Suggested
-    creds, err := clicred.New(opts)
+```
+// Current
+creds, err := azidentity.NewAzureCLICredential(opts)
+// Suggested
+creds, err := clicred.New(opts)
+```
 
 Function naming should be as simple as possible and this can be helped by making
 smaller and simpler packages. Just as interfaces should be smaller and simpler.
@@ -168,10 +250,12 @@ Structures like `ClientOptions` should be just `Options`.
 
 Functions' signatures should be simpler:
 
-    // Current
-    ExtendImmutabilityPolicy(ctx context.Context, resourceGroupName string, accountName string, containerName string, ifMatch string, blobContainersExtendImmutabilityPolicyOptions *BlobContainersExtendImmutabilityPolicyOptions) (*ImmutabilityPolicyResponse, error)
-    // Suggested
-    ExtendImmutabilityPolicy(ctx context.Context, resourceGroup string, account string, container string, ifMatch string, policyOptions *BlobContainersExtendImmutabilityPolicyOptions) (*ImmutabilityPolicyResponse, error)
+```
+// Current
+ExtendImmutabilityPolicy(ctx context.Context, resourceGroupName string, accountName string, containerName string, ifMatch string, blobContainersExtendImmutabilityPolicyOptions *BlobContainersExtendImmutabilityPolicyOptions) (*ImmutabilityPolicyResponse, error)
+// Suggested
+ExtendImmutabilityPolicy(ctx context.Context, resourceGroup string, account string, container string, ifMatch string, policyOptions *BlobContainersExtendImmutabilityPolicyOptions) (*ImmutabilityPolicyResponse, error)
+```
 
 It would help as well to use structures here (check the respective section of
 the document for a longer explanation) but it can still be used as an example of
@@ -205,11 +289,39 @@ APIs][friendlyapis]. The functions' signatures end-up being very clean and
 simple, the options can be documented and added as much logic as required in a
 very clean way.
 
-
+    TODO how this would look like
 
 [friendlyapis]: https://dave.cheney.net/2014/10/17/functional-options-for-friendly-apis
 
-### Document packages
+### Document packages and follow idiomatic-documentation patterns
+
+If I run:
+
+```
+go doc -all ./sdk/arm/compute/2019-12-01/armcompute/ | less
+```
+
+The result is that nothing is documented as it should. There's no basic
+documentation for the package, so no short description, this should look like:
+
+```
+// Package azidentity provides the client and types for making API requests to
+// Azure's Identity service.
+package azidentity
+```
+
+Every exported element should be documented and there's no need to do it as:
+
+```
+  // BeginCreateOrUpdate - Creates or updates...
+```
+
+The idiomatic way is:
+
+```
+  // BeginCreateOrUpdate starts create or updates of a container service with
+  // specified configuration of orchestrator...
+```
 
 ### Use fmt.Sprintf or strings.Builder for string building
 
@@ -221,30 +333,32 @@ This way to build strings is very weird and non-performant: [1][weirdstrings1],
 
 Performance-wise is the worse option:
 
-    ❯ go test -v -bench=. -benchtime 5s -benchmem
-    goos: darwin
-    goarch: amd64
-    pkg: github.com/nrxr/azure-review/benchmarks/stringconcat
-    BenchmarkJoin
-    BenchmarkJoin-8                         86941962                63.6 ns/op            16 B/op          1 allocs/op
-    BenchmarkSprintf
-    BenchmarkSprintf-8                      20356816               298 ns/op              96 B/op          6 allocs/op
-    BenchmarkConcat
-    BenchmarkConcat-8                       39421702               152 ns/op              32 B/op          4 allocs/op
-    BenchmarkConcatOneLine
-    BenchmarkConcatOneLine-8                99958263                57.3 ns/op             0 B/op          0 allocs/op
-    BenchmarkBuffer
-    BenchmarkBuffer-8                       80482536                71.8 ns/op            64 B/op          1 allocs/op
-    BenchmarkBufferWithReset
-    BenchmarkBufferWithReset-8              147566794               40.8 ns/op             0 B/op          0 allocs/op
-    BenchmarkBufferFprintf
-    BenchmarkBufferFprintf-8                20845557               289 ns/op              80 B/op          5 allocs/op
-    BenchmarkBufferStringBuilder
-    BenchmarkBufferStringBuilder-8          86770474                67.7 ns/op            24 B/op          2 allocs/op
-    BenchmarkStringsReplace
-    BenchmarkStringsReplace-8               14658063               407 ns/op             192 B/op         10 allocs/op
-    PASS
-    ok      github.com/nrxr/azure-review/benchmarks/stringconcat    59.381s
+```
+❯ go test -v -bench=. -benchtime 5s -benchmem
+goos: darwin
+goarch: amd64
+pkg: github.com/nrxr/azure-review/benchmarks/stringconcat
+BenchmarkJoin
+BenchmarkJoin-8                         86941962                63.6 ns/op            16 B/op          1 allocs/op
+BenchmarkSprintf
+BenchmarkSprintf-8                      20356816               298 ns/op              96 B/op          6 allocs/op
+BenchmarkConcat
+BenchmarkConcat-8                       39421702               152 ns/op              32 B/op          4 allocs/op
+BenchmarkConcatOneLine
+BenchmarkConcatOneLine-8                99958263                57.3 ns/op             0 B/op          0 allocs/op
+BenchmarkBuffer
+BenchmarkBuffer-8                       80482536                71.8 ns/op            64 B/op          1 allocs/op
+BenchmarkBufferWithReset
+BenchmarkBufferWithReset-8              147566794               40.8 ns/op             0 B/op          0 allocs/op
+BenchmarkBufferFprintf
+BenchmarkBufferFprintf-8                20845557               289 ns/op              80 B/op          5 allocs/op
+BenchmarkBufferStringBuilder
+BenchmarkBufferStringBuilder-8          86770474                67.7 ns/op            24 B/op          2 allocs/op
+BenchmarkStringsReplace
+BenchmarkStringsReplace-8               14658063               407 ns/op             192 B/op         10 allocs/op
+PASS
+ok      github.com/nrxr/azure-review/benchmarks/stringconcat    59.381s
+```
 
 Readability-wise is the worse option as well. The best combination of
 readability and performance is given by `strings.Builder`. Concat in one-line is
