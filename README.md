@@ -29,7 +29,7 @@ patterns I'm using already in the rest of my code.
 
 I would love to use it as:
 
-```
+```golang
 package main
 
 import (
@@ -74,7 +74,7 @@ And this is great as an example for a general idea on how to use it, but the
 most likely way to use it in my systems would be inside a package, so something
 like uploading blobs would end up looking like this:
 
-```
+```golang
 -- converter/converter.go --
 package converter
 
@@ -188,7 +188,7 @@ broken and to have simpler names and import paths.
 
 Currently import paths look like:
 
-```
+```golang
 import (
   "github.com/Azure/azure-sdk-for-go/sdk/arm/compute/2019-12-01/armcompute"
   "github.com/Azure/azure-sdk-for-go/sdk/arm/storage/2019-06-01/armstorage"
@@ -202,7 +202,7 @@ but that is covered in another section of this document.
 This can be easily solved by using vanity URLs. Uber uses it so importing `zap`
 is as easy as:
 
-```
+```golang
 import (
   "go.uber.org/zap"
 )
@@ -210,7 +210,7 @@ import (
 
 The idea for this could be:
 
-```
+```golang
 import (
   // Simplest change to apply.
   "go.azure.org/compute"
@@ -237,7 +237,7 @@ This is a simple implementation that GCP uses: https://github.com/GoogleCloudPla
 In the first example in the document the creation of CLI credentials is as easy
 as:
 
-```
+```golang
 // Current
 creds, err := azidentity.NewAzureCLICredential(opts)
 // Suggested
@@ -251,7 +251,7 @@ Structures like `ClientOptions` should be just `Options`.
 
 Functions' signatures should be simpler:
 
-```
+```golang
 // Current
 ExtendImmutabilityPolicy(ctx context.Context, resourceGroupName string, accountName string, containerName string, ifMatch string, blobContainersExtendImmutabilityPolicyOptions *BlobContainersExtendImmutabilityPolicyOptions) (*ImmutabilityPolicyResponse, error)
 // Suggested
@@ -305,7 +305,7 @@ go doc -all ./sdk/arm/compute/2019-12-01/armcompute/ | less
 The result is that nothing is documented as it should. There's no basic
 documentation for the package, so no short description, this should look like:
 
-```
+```golang
 // Package azidentity provides the client and types for making API requests to
 // Azure's Identity service.
 package azidentity
@@ -313,13 +313,13 @@ package azidentity
 
 Every exported element should be documented and there's no need to do it as:
 
-```
+```golang
   // BeginCreateOrUpdate - Creates or updates...
 ```
 
 The idiomatic way is:
 
-```
+```golang
   // BeginCreateOrUpdate starts create or updates of a container service with
   // specified configuration of orchestrator...
 ```
